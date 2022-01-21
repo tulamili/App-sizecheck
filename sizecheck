@@ -12,7 +12,8 @@ use autodie qw [ open close ] ;
 
 $o{d} //= 1 ; # 狙ったディレクトリで、何段階の深さまで掘って読むか。
 my @W = map { File::Spec -> catfile ( ('*') x $_) } 1 .. $o{d} ; # * */*　*/*/* .. を生成。
-my $c = 0 ; # 処理したファイルの個数
+my $C = 0 ; # 処理したファイルの個数
+my $B = 0 ; # バイト数の合計
 
 & item_proc if $#ARGV == -1 ;
 & item_proc ($_) for @ARGV ; 
@@ -21,19 +22,21 @@ exit 0 ;
 sub item_proc () {
   my @wildcards = $#_ == -1 ? "@W" : -d $_[0] ? map { File::Spec->catfile( $_[0], $_ ) } @W : $_[0] ;
   my @files = sort grep { -f } glob "@wildcards"; # $" に依存。 <-- - sort している。良いか否か。
-  do { say $_ for @files ; $c = @files ; return 0 } if $o{0} ; # -0 が指定されたら最も単純な処理だけする。
+  do { say $_ for @files ; $C = @files ; return 0 } if $o{0} ; # -0 が指定されたら最も単純な処理だけする。
   for ( @files ) { 
-    $c ++ ; 
-    my @out = ( do { -s } , $_ ) ;
+    $C ++ ; 
+    my $bytes = -s ; # バイトサイズを取り出す。
+    $B += $bytes ;
+    my @out = ( $bytes , $_ ) ;
     splice @out , 1 , 0 , md5_hex do { open my $FH , '<' , $_ ; undef $/ ; <$FH> } if $o{m} ;
-    splice @out , 0 , 0, $c if $o{':'} ;
+    splice @out , 0 , 0, $C if $o{':'} ;
     say join "\t" , @out ;
   }
 }
 
 END {
   my $rt = sprintf '%0.3f' , tv_interval $dt_start  ; # 上記の実行に要した秒数
-  say STDERR CYAN DARK BOLD "$c file(s). ", "Run time: $rt second(s)." if 0 ne ($o{2}//'') ;
+  say STDERR CYAN DARK BOLD "$C plain file(s). $B byte(s) in total. Run time: $rt second(s)." if 0 ne ($o{2}//'') ;
 }
 
 #   2022-01-20 thu ; Toshiyuki Shimono 下野寿之 
@@ -73,3 +76,4 @@ sub HELP_MESSAGE {
   --help opt : オプションのみのヘルプを出す。opt以外でも options と先頭が1文字以上一致すれば良い。
 
 =cut
+
