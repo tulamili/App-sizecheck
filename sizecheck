@@ -3,7 +3,7 @@ use 5.010 ;
 use strict ; 
 use warnings ; # also confirmed on 5.011 5.014 5.018  
 use FindBin qw [ $Script ] ; 
-use Getopt::Std ; getopts ':=:02:d:m' => \my %o ;
+use Getopt::Std ; getopts ':=:,:02:d:m' => \my %o ;
 use Term::ANSIColor qw [ :constants color ]  ; $Term::ANSIColor::AUTORESET = 1 ; 
 use Time::HiRes qw [ gettimeofday tv_interval ] ; my ${ dt_start } = [ gettimeofday ] ; 
 use File::Spec ;
@@ -12,10 +12,14 @@ use autodie qw [ open close ] ;
 
 $o{d} //= 1 ; # 狙ったディレクトリで、何段階の深さまで掘って読むか。
 my $oEQ2 = 2 eq ( $o{'='} // '' ) ; 
+my $oC0 = 0 eq ( $o{','} // '' ) ; 
+#say $oC0 ? YELLOW 1 : RED 0 ; exit ;
 my @W = map { File::Spec -> catfile ( ('*') x $_) } 1 .. $o{d} ; # * */*　*/*/* .. を生成。
 my $C = 0 ; # 処理したファイルの個数
 my $B = 0 ; # バイト数の合計
 
+sub d3 ($) ;
+* d3 = $oC0 ? sub ($) { $_[0] } : sub ($) { $_[0] =~ s/(?<=\d)(?=(\d\d\d)+($|\D))/,/gr } ;
 
 & proc_1 ;
 & proc_item if $#ARGV == -1 ;
@@ -40,7 +44,7 @@ sub proc_item () {
     $C ++ ; 
     my $bytes = -s ; # バイトサイズを取り出す。
     $B += $bytes ;
-    my @out = ( $bytes , $_ ) ;
+    my @out = ( d3 $bytes , $_ ) ;
     splice @out , 1 , 0 , md5_hex do { open my $FH , '<' , $_ ; undef $/ ; <$FH> } if $o{m} ;
     splice @out , 0 , 0, $C if $o{':'} ;
     say join "\t" , @out ;
@@ -49,7 +53,7 @@ sub proc_item () {
 
 END {
   my $rt = sprintf '%0.3f' , tv_interval $dt_start  ; # 上記の実行に要した秒数
-  say STDERR CYAN DARK BOLD "$C plain file(s). $B byte(s) in total. Run time: $rt second(s)." if 0 ne ($o{2}//'') ;
+  say STDERR CYAN DARK BOLD d3 $C, " plain file(s). ", d3 $B , " byte(s) in total. Run time: $rt second(s)." if 0 ne ($o{2}//'') ;
 }
 
 #   2022-01-20 thu ; Toshiyuki Shimono 下野寿之 
@@ -87,9 +91,13 @@ sub HELP_MESSAGE {
 
    -= 0 ; 出力のヘッダーを先頭行への出力を抑制する。
    -= 2 ; 出力のヘッダーの先頭行への出力に下線を引く。ANSIエスケープシーケンスの仕組みを使って。
+   -, 0 ; 出力の数値の部分の千進法による3桁区切りのコンマ文字を抑制する。
 
   --help : この $0 のヘルプメッセージを出す。  perldoc -t $0 | cat でもほぼ同じ。
   --help opt : オプションのみのヘルプを出す。opt以外でも options と先頭が1文字以上一致すれば良い。
 
+  開発上のメモ : 
+   * "-b N" で各ファイルの最初のNバイト、"-e N"で最後のNバイトも出すようにしたい。
+   * 対象となった全てのファイルの、MD5ハッシュ値の合計も計算したい。Bigintを使うなどして。
 =cut
 
