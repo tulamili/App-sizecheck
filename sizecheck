@@ -3,7 +3,7 @@ use 5.010 ;
 use strict ; 
 use warnings ; # also confirmed on 5.011 5.014 5.018  
 use FindBin qw [ $Script ] ; 
-use Getopt::Std ; getopts ':02:d:m' => \my %o ;
+use Getopt::Std ; getopts ':=:02:d:m' => \my %o ;
 use Term::ANSIColor qw [ :constants color ]  ; $Term::ANSIColor::AUTORESET = 1 ; 
 use Time::HiRes qw [ gettimeofday tv_interval ] ; my ${ dt_start } = [ gettimeofday ] ; 
 use File::Spec ;
@@ -11,15 +11,28 @@ use Digest::MD5 qw [ md5_hex ] ;
 use autodie qw [ open close ] ; 
 
 $o{d} //= 1 ; # 狙ったディレクトリで、何段階の深さまで掘って読むか。
+my $oEQ2 = 2 eq ( $o{'='} // '' ) ; 
 my @W = map { File::Spec -> catfile ( ('*') x $_) } 1 .. $o{d} ; # * */*　*/*/* .. を生成。
 my $C = 0 ; # 処理したファイルの個数
 my $B = 0 ; # バイト数の合計
 
-& item_proc if $#ARGV == -1 ;
-& item_proc ($_) for @ARGV ; 
+
+& proc_1 ;
+& proc_item if $#ARGV == -1 ;
+& proc_item ($_) for @ARGV ; 
 exit 0 ;
  
-sub item_proc () {
+sub proc_1 () { 
+  return if $o{0} || 0 eq ($o{'='}//'') ; 
+  my @out = qw[ BYTES FILE ] ; 
+  splice @out , 1 , 0 , qw[ MD5CHECKSUM_HEXADECIMAL_32DIGITS ] if $o{m} ; 
+  splice @out , 0 , 0 , qw[ N ] if $o{':'} ; 
+  @out = map { UNDERLINE $_ } @out if $oEQ2 ; 
+  say do { $" = "\t" ; "@out" } ; 
+  #say $oEQ2 ? UNDERLINE $out : $out ; 
+}
+
+sub proc_item () {
   my @wildcards = $#_ == -1 ? "@W" : -d $_[0] ? map { File::Spec->catfile( $_[0], $_ ) } @W : $_[0] ;
   my @files = sort grep { -f } glob "@wildcards"; # $" に依存。 <-- - sort している。良いか否か。
   do { say $_ for @files ; $C = @files ; return 0 } if $o{0} ; # -0 が指定されたら最も単純な処理だけする。
@@ -71,6 +84,9 @@ sub HELP_MESSAGE {
    -:   ; ファイルの番号を出力する。
    -2 0 ; 2次情報(処理したファイル数と経過時間)を出さない。
    -0   ; 単にファイルの一覧を表示。ドライランと考えることも出来る。
+
+   -= 0 ; 出力のヘッダーを先頭行への出力を抑制する。
+   -= 2 ; 出力のヘッダーの先頭行への出力に下線を引く。ANSIエスケープシーケンスの仕組みを使って。
 
   --help : この $0 のヘルプメッセージを出す。  perldoc -t $0 | cat でもほぼ同じ。
   --help opt : オプションのみのヘルプを出す。opt以外でも options と先頭が1文字以上一致すれば良い。
